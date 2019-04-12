@@ -1,7 +1,6 @@
 package com.timborowy.screenshotter.Adapters;
 
 import android.content.Context;
-import android.media.Image;
 import android.support.annotation.NonNull;
 import android.support.v4.view.PagerAdapter;
 import android.support.v4.view.ViewPager;
@@ -16,9 +15,9 @@ import com.timborowy.screenshotter.R;
 
 public class FullSizeAdapter extends PagerAdapter {
 
-    Context context;
-    String[] images;
-    LayoutInflater inflater;
+    private Context context;
+    private String[] images;
+    private LayoutInflater inflater;
 
     public FullSizeAdapter(Context context, String[] images) {
         this.context = context;
@@ -40,7 +39,7 @@ public class FullSizeAdapter extends PagerAdapter {
     public Object instantiateItem(@NonNull ViewGroup container, int position) {
 
         inflater = (LayoutInflater)context.getSystemService(context.LAYOUT_INFLATER_SERVICE);
-        View v = inflater.inflate(R.layout.full_item, null);
+        View v = inflater.inflate(R.layout.full_screen_item, null);
 
         ImageView imageView = (ImageView)v.findViewById(R.id.img);
 
