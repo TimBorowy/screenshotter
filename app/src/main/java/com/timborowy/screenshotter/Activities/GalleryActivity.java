@@ -1,9 +1,14 @@
 package com.timborowy.screenshotter.Activities;
 
 import android.content.Intent;
+import android.graphics.Bitmap;
+import android.net.Uri;
+import android.os.Environment;
+import android.provider.MediaStore;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.NavigationView;
 import android.support.design.widget.Snackbar;
+import android.support.v4.content.FileProvider;
 import android.support.v4.view.GravityCompat;
 import android.support.v4.widget.DrawerLayout;
 import android.support.v7.app.ActionBarDrawerToggle;
@@ -22,6 +27,7 @@ import com.android.volley.Request;
 import com.android.volley.RequestQueue;
 import com.android.volley.Response;
 import com.android.volley.VolleyError;
+//import com.android.volley.request.SimpleMultiPartRequest;
 import com.android.volley.toolbox.JsonArrayRequest;
 import com.android.volley.toolbox.Volley;
 import com.timborowy.screenshotter.Adapters.GalleryImageAdapter;
@@ -32,6 +38,11 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.File;
+import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+
 
 public class GalleryActivity extends AppCompatActivity implements NavigationView.OnNavigationItemSelectedListener{
 
@@ -39,6 +50,10 @@ public class GalleryActivity extends AppCompatActivity implements NavigationView
     RecyclerView.LayoutManager layoutManager;
     final String[] images = new String[50];
     final String JSONUrl = "https://upload.borowy.nl/api/1";
+    final String UploadUrl = "https://upload.borowy.nl/api/upload";
+    static final int REQUEST_IMAGE_CAPTURE = 1;
+    static final int REQUEST_TAKE_PHOTO = 1;
+    String currentPhotoPath;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -105,6 +120,82 @@ public class GalleryActivity extends AppCompatActivity implements NavigationView
         // Add the request to the RequestQueue.
         queue.add(jsonArrayRequest);
     }
+
+
+    // Handle photo that camera has taken
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == REQUEST_IMAGE_CAPTURE && resultCode == RESULT_OK) {
+            Bundle extras = data.getExtras();
+            Bitmap imageBitmap = (Bitmap) extras.get("data");
+            //imageView.setImageBitmap(imageBitmap);
+
+
+
+            //sendImageRequest(imageBitmap);
+        }
+    }
+
+    private File createImageFile() throws IOException {
+        // Create an image file name
+        String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
+        String imageFileName = "JPEG_" + timeStamp + "_";
+        File storageDir = getExternalFilesDir(Environment.DIRECTORY_PICTURES);
+        File image = File.createTempFile(
+                imageFileName,  /* prefix */
+                ".jpg",         /* suffix */
+                storageDir      /* directory */
+        );
+
+        // Save a file: path for use with ACTION_VIEW intents
+        currentPhotoPath = image.getAbsolutePath();
+        return image;
+    }
+
+    private void dispatchTakePictureIntent() {
+        Intent takePictureIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+        // Ensure that there's a camera activity to handle the intent
+        if (takePictureIntent.resolveActivity(getPackageManager()) != null) {
+            // Create the File where the photo should go
+            File photoFile = null;
+            try {
+                photoFile = createImageFile();
+            } catch (IOException ex) {
+                // Error occurred while creating the File
+                Toast.makeText(getApplicationContext(), "Error saving file", Toast.LENGTH_SHORT);
+            }
+            // Continue only if the File was successfully created
+            if (photoFile != null) {
+                Uri photoURI = FileProvider.getUriForFile(this,
+                        "com.example.android.fileprovider",
+                        photoFile);
+                takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT, photoURI);
+                startActivityForResult(takePictureIntent, REQUEST_TAKE_PHOTO);
+            }
+        }
+    }
+
+    /*protected void sendImageRequest(Bitmap imageBitmap){
+        SimpleMultiPartRequest smr = new SimpleMultiPartRequest(Request.Method.POST, UploadUrl,
+                new Response.Listener<String>() {
+                    @Override
+                    public void onResponse(String response) {
+                        Log.d("Response", response);
+                        Toast.makeText(getApplicationContext(), "Image upload is gelukt!", Toast.LENGTH_LONG).show();
+                    }
+                }, new Response.ErrorListener() {
+            @Override
+            public void onErrorResponse(VolleyError error) {
+                Toast.makeText(getApplicationContext(), error.getMessage(), Toast.LENGTH_LONG).show();
+            }
+        });
+        smr.addStringParam("param string", " data text");
+        //Todo: uncomment this
+        //smr.addFile("param file", imageBitmap);
+
+        RequestQueue mRequestQueue = Volley.newRequestQueue(getApplicationContext());
+        mRequestQueue.add(smr);
+    }*/
 
 
     protected void handleResponse(JSONArray response){
@@ -175,6 +266,12 @@ public class GalleryActivity extends AppCompatActivity implements NavigationView
 
         //noinspection SimplifiableIfStatement
         if (id == R.id.action_settings) {
+
+            // start settings activity
+            Intent i = new Intent(getApplicationContext(), SettingsActivity.class);
+            startActivity(i);
+
+        } else if (id == R.id.action_cast){
             return true;
         }
 
@@ -189,6 +286,8 @@ public class GalleryActivity extends AppCompatActivity implements NavigationView
 
         if (id == R.id.nav_camera) {
             // Handle the camera action
+            dispatchTakePictureIntent();
+
         } else if (id == R.id.nav_gallery) {
 
         } else if (id == R.id.nav_slideshow) {

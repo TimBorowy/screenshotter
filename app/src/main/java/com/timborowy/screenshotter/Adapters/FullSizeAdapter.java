@@ -43,6 +43,13 @@ public class FullSizeAdapter extends PagerAdapter {
 
         ImageView imageView = (ImageView)v.findViewById(R.id.img);
 
+        /*new StfalconImageViewer.Builder<>(context, images, new ImageLoader<String>() {
+            @Override
+            public void loadImage(ImageView imageView, String imageUrl) {
+                Glide.with(context).load(imageUrl).into(imageView)
+            }
+        }).show();*/
+
         Glide.with(context).load(images[position]).apply(new RequestOptions().centerInside())
                 .into(imageView);
 
