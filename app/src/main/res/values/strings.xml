@@ -41,7 +41,7 @@
     </string-array>
 
     <!-- Example settings for Data & Sync -->
-    <string name="pref_header_data_sync">Data &amp; sync</string>
+    <string name="pref_header_data_sync">API Data &amp; sync</string>
 
     <string name="pref_title_sync_frequency">Sync frequency</string>
     <string-array name="pref_sync_frequency_titles">
@@ -86,4 +86,7 @@
     <string name="pref_ringtone_silent">Silent</string>
 
     <string name="pref_title_vibrate">Vibrate</string>
+    <string name="upload_key">Upload key</string>
+    <string name="pref_description_refresh_ui">Refresh the UI to see the newly uploaded image</string>
+    <string name="pref_title_refresh_ui">Refresh UI on upload</string>
 </resources>
