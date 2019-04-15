@@ -1,7 +1,10 @@
 package com.timborowy.screenshotter.Activities;
 
+import android.Manifest;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.location.Location;
 import android.net.Uri;
 import android.os.Environment;
 import android.preference.PreferenceManager;
@@ -9,6 +12,7 @@ import android.provider.MediaStore;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.NavigationView;
 import android.support.design.widget.Snackbar;
+import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.FileProvider;
 import android.support.v4.view.GravityCompat;
 import android.support.v4.widget.DrawerLayout;
@@ -33,6 +37,9 @@ import com.android.volley.TimeoutError;
 import com.android.volley.VolleyError;
 import com.android.volley.toolbox.JsonArrayRequest;
 import com.android.volley.toolbox.Volley;
+import com.google.android.gms.location.LocationResult;
+import com.google.android.gms.location.LocationServices;
+import com.google.android.gms.tasks.OnSuccessListener;
 import com.timborowy.screenshotter.Adapters.GalleryImageAdapter;
 import com.timborowy.screenshotter.Interfaces.IRecyclerViewClickListener;
 import com.timborowy.screenshotter.R;
@@ -45,10 +52,16 @@ import org.json.JSONObject;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.net.URI;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
+
+
+import com.google.android.gms.location.FusedLocationProviderClient;
+import com.google.android.gms.location.LocationCallback;
+import com.google.android.gms.location.LocationRequest;
 
 
 public class GalleryActivity extends AppCompatActivity implements NavigationView.OnNavigationItemSelectedListener{
@@ -63,9 +76,20 @@ public class GalleryActivity extends AppCompatActivity implements NavigationView
 
     String UploadKey;
     Boolean RefreshUI;
+    Uri ImagePath;
 
     static final int REQUEST_IMAGE_CAPTURE = 1;
     static final int REQUEST_TAKE_PHOTO = 1;
+
+    private FusedLocationProviderClient fusedLocationClient;
+    private LocationRequest locationRequest;
+    private LocationCallback locationCallback;
+
+    public final static String LOG_TAG = "screenshotter";
+    public final static int REQUEST_LAST_LOCATION_PERMISSION = 1;
+    public final static int REQUEST_LOCATION_UPDATES_PERMISSION = 2;
+
+    private boolean locationUpdates = true;
 
     String currentPhotoPath;
 
@@ -111,7 +135,154 @@ public class GalleryActivity extends AppCompatActivity implements NavigationView
 
         NavigationView navigationView = (NavigationView) findViewById(R.id.nav_view);
         navigationView.setNavigationItemSelectedListener(this);
+
+
+
+
+
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
+        createLocationRequest();
+
+        locationCallback = new LocationCallback() {
+            @Override
+            public void onLocationResult(LocationResult locationResult) {
+                if (locationResult == null) {
+                    Log.d(LOG_TAG, "Locatie onbekend");
+                    return;
+                }
+                for (Location location : locationResult.getLocations()) {
+                    Log.d(LOG_TAG, "Locatie ontvangen");
+                    Log.d(LOG_TAG, "Locatie: " + location.getLatitude() + ", " + location.getLongitude());
+                }
+            };
+        };
+
+        getLastKnownLocation();
+
     }
+
+
+    @Override
+    protected void onResume() {
+        if (locationUpdates) {
+            startLocationUpdates();
+        }
+        super.onResume();
+    }
+
+    @Override
+    protected void onPause() {
+        fusedLocationClient.removeLocationUpdates(locationCallback);
+        super.onPause();
+    }
+
+
+
+
+
+
+
+
+
+
+
+    private void getLastKnownLocation() {
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            // TODO: Consider calling
+            //    ActivityCompat#requestPermissions
+            // here to request the missing permissions, and then overriding
+            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+            //                                          int[] grantResults)
+            // to handle the case where the user grants the permission. See the documentation
+            // for ActivityCompat#requestPermissions for more details.
+
+            String permissions[] = {Manifest.permission.ACCESS_FINE_LOCATION};
+            ActivityCompat.requestPermissions(this, permissions, REQUEST_LAST_LOCATION_PERMISSION);
+            Log.d(LOG_TAG, "Geen locatie permissie");
+            return;
+        }
+        fusedLocationClient.getLastLocation()
+                .addOnSuccessListener(this, new OnSuccessListener<Location>() {
+                    @Override
+                    public void onSuccess(Location location) {
+                        // Got last known location. In some rare situations this can be null.
+                        if (location != null) {
+                            // Logic to handle location object
+                            Log.d(LOG_TAG, "Laatste locatie bekend");
+                        } else {
+                            Log.d(LOG_TAG, "Laatste locatie NIET bekend");
+                        }
+                    }
+                });
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        if (permissions.length == 0) {
+            // no permissions in array, break early
+            return;
+        }
+
+        switch (requestCode) {
+            case REQUEST_LAST_LOCATION_PERMISSION:
+                if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    Log.d(LOG_TAG, "Permissie gekregen");
+                    getLastKnownLocation();
+                } else {
+                    Log.d(LOG_TAG, "Permissie NIET gekregen");
+                }
+                break;
+            case REQUEST_LOCATION_UPDATES_PERMISSION:
+                if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    Log.d(LOG_TAG, "Permissie gekregen (updates)");
+                    startLocationUpdates();
+                } else {
+                    Log.d(LOG_TAG, "Permissie NIET gekregen (updates)");
+                    locationUpdates = false;
+                }
+
+        }
+    }
+
+    private void createLocationRequest() {
+        locationRequest = LocationRequest.create();
+        locationRequest.setInterval(10000);
+        locationRequest.setFastestInterval(5000);
+        locationRequest.setPriority(LocationRequest.PRIORITY_LOW_POWER);
+    }
+
+    private void startLocationUpdates() {
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            // TODO: Consider calling
+            //    ActivityCompat#requestPermissions
+            // here to request the missing permissions, and then overriding
+            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+            //                                          int[] grantResults)
+            // to handle the case where the user grants the permission. See the documentation
+            // for ActivityCompat#requestPermissions for more details.
+            String permissions[] = {Manifest.permission.ACCESS_FINE_LOCATION};
+            ActivityCompat.requestPermissions(this, permissions, REQUEST_LOCATION_UPDATES_PERMISSION);
+
+            Log.d(LOG_TAG, "Geen locatie permissies (update)");
+            return;
+        }
+        fusedLocationClient.requestLocationUpdates(locationRequest,
+                locationCallback,
+                null /* Looper */);
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
     protected void makeRequest(){
@@ -204,16 +375,11 @@ public class GalleryActivity extends AppCompatActivity implements NavigationView
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         if (requestCode == REQUEST_IMAGE_CAPTURE && resultCode == RESULT_OK) {
 
-            Intent intent = getIntent();
 
             Bundle extras = data.getExtras();
             Bitmap imageBitmap = (Bitmap) extras.get("data");
-            //imageView.setImageBitmap(imageBitmap);
 
-            //String photoURI = data.getStringExtra(MediaStore.EXTRA_OUTPUT);
-            Toast.makeText(getApplicationContext(), "Took photo", Toast.LENGTH_SHORT);
-
-
+            Toast.makeText(getApplicationContext(), "Took photo", Toast.LENGTH_SHORT).show();
 
             sendImageRequest(imageBitmap);
             //sendImageRequest(currentPhotoPath);
@@ -233,6 +399,7 @@ public class GalleryActivity extends AppCompatActivity implements NavigationView
 
         // Save a file: path for use with ACTION_VIEW intents
         currentPhotoPath = image.getAbsolutePath();
+        //Log.d("screenshotter", currentPhotoPath);
         return image;
     }
 
@@ -246,7 +413,7 @@ public class GalleryActivity extends AppCompatActivity implements NavigationView
                 photoFile = createImageFile();
             } catch (IOException ex) {
                 // Error occurred while creating the File
-                Toast.makeText(getApplicationContext(), "Error saving file", Toast.LENGTH_SHORT);
+                Toast.makeText(getApplicationContext(), "Error saving file", Toast.LENGTH_SHORT).show();
             }
             // Continue only if the File was successfully created
             if (photoFile != null) {
@@ -254,7 +421,9 @@ public class GalleryActivity extends AppCompatActivity implements NavigationView
                         "com.example.android.fileprovider",
                         photoFile);
 
-                Toast.makeText(getApplicationContext(), photoURI.toString(), Toast.LENGTH_SHORT);
+                //Toast.makeText(getApplicationContext(), photoURI.toString(), Toast.LENGTH_SHORT);
+                ImagePath = photoURI;
+                Log.d("screenshotter", ImagePath.toString());
 
                 takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT, photoURI);
                 startActivityForResult(takePictureIntent, REQUEST_TAKE_PHOTO);
@@ -320,7 +489,7 @@ public class GalleryActivity extends AppCompatActivity implements NavigationView
                         } else if (networkResponse.statusCode == 400) {
                             errorMessage = message+ " Check your inputs";
                         } else if (networkResponse.statusCode == 500) {
-                            errorMessage = message+" Something is getting wrong";
+                            errorMessage = message+" Something went wrong";
                         }
                     } catch (JSONException e) {
                         e.printStackTrace();
@@ -343,7 +512,8 @@ public class GalleryActivity extends AppCompatActivity implements NavigationView
                 Map<String, DataPart> params = new HashMap<>();
                 // file name could found file base or direct access from real path
                 // for now just get bitmap data from ImageView
-                params.put("file_input", new DataPart("file.jpg", getFileDataFromBitmap(imageBitmap), "image/jpg"));
+                //params.put("file_input", new DataPart("file.jpg", getFileDataFromBitmap(imageBitmap), "image/jpg"));
+                params.put("file_input", new DataPart("file.jpg", getFileDataFromUri(ImagePath), "image/jpg"));
 
                 return params;
             }
@@ -351,8 +521,6 @@ public class GalleryActivity extends AppCompatActivity implements NavigationView
 
         // Add the request to the RequestQueue.
         queue.add(multipartRequest);
-
-        //VolleySingleton.getInstance(getBaseContext()).addToRequestQueue(multipartRequest);
     }
 
     /**
@@ -369,7 +537,27 @@ public class GalleryActivity extends AppCompatActivity implements NavigationView
     }
 
 
+    /**
+     * Turn image into byte array.
+     *
+     * @param imagePath data
+     * @return byte array
+     */
+    public byte[] getFileDataFromUri(Uri imagePath) {
+        try{
 
+            Bitmap bitmapImage = MediaStore.Images.Media.getBitmap(getContentResolver(), imagePath);
+
+            ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+            bitmapImage.compress(Bitmap.CompressFormat.JPEG, 90, byteArrayOutputStream);
+            return byteArrayOutputStream.toByteArray();
+        } catch (Exception e){
+            //TODO: handle this.
+            e.printStackTrace();
+        }
+
+        return new ByteArrayOutputStream().toByteArray();
+    }
 
 
 
