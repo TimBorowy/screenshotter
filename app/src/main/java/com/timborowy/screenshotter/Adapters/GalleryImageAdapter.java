@@ -21,9 +21,9 @@ import com.timborowy.screenshotter.R;
 
 public class GalleryImageAdapter extends RecyclerView.Adapter<GalleryImageAdapter.ImageViewHolder> {
 
-    Context context;
-    String[] urlList;
-    IRecyclerViewClickListener clickListener;
+    private Context context;
+    private String[] urlList;
+    private IRecyclerViewClickListener clickListener;
 
     public GalleryImageAdapter(Context context, String[] urlList, IRecyclerViewClickListener clickListener){
         this.context = context;
@@ -71,10 +71,10 @@ public class GalleryImageAdapter extends RecyclerView.Adapter<GalleryImageAdapte
         ProgressBar progressBar;
 
 
-        public ImageViewHolder(View itemView) {
+        private ImageViewHolder(View itemView) {
             super(itemView);
-            imageView  = (ImageView)itemView.findViewById(R.id.imageView);
-            progressBar = (ProgressBar)itemView.findViewById(R.id.progBar);
+            imageView  = itemView.findViewById(R.id.imageView);
+            progressBar = itemView.findViewById(R.id.progBar);
             itemView.setOnClickListener(this);
         }
 

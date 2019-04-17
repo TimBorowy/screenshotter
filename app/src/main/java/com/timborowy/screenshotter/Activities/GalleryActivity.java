@@ -1,9 +1,11 @@
 package com.timborowy.screenshotter.Activities;
 
 import android.Manifest;
+import android.content.ContentResolver;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.location.Location;
 import android.net.Uri;
 import android.os.Environment;
@@ -11,7 +13,6 @@ import android.preference.PreferenceManager;
 import android.provider.MediaStore;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.NavigationView;
-import android.support.design.widget.Snackbar;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.FileProvider;
 import android.support.v4.view.GravityCompat;
@@ -51,8 +52,10 @@ import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.net.URI;
+import java.io.InputStream;
+//import java.net.URI;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.HashMap;
@@ -73,9 +76,10 @@ public class GalleryActivity extends AppCompatActivity implements NavigationView
     final String[] images = new String[50];
     final String JSONUrl = "https://upload.borowy.nl/api/1";
     final String UploadUrl = "https://upload.borowy.nl/api/upload";
+    //final String UploadUrl = "http://164.132.226.87:3333/upload";
 
-    String UploadKey;
-    Boolean RefreshUI;
+    private String UploadKey;
+    private Boolean RefreshUI;
     Uri ImagePath;
 
     static final int REQUEST_IMAGE_CAPTURE = 1;
@@ -90,6 +94,7 @@ public class GalleryActivity extends AppCompatActivity implements NavigationView
     public final static int REQUEST_LOCATION_UPDATES_PERMISSION = 2;
 
     private boolean locationUpdates = true;
+    private Location currentLocation;
 
     String currentPhotoPath;
 
@@ -98,7 +103,7 @@ public class GalleryActivity extends AppCompatActivity implements NavigationView
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_gallery_nav_drawer);
 
-        recyclerView = (RecyclerView) findViewById(R.id.recyclerview);
+        recyclerView = findViewById(R.id.recyclerview);
         layoutManager = new GridLayoutManager(this,2);
         recyclerView.setHasFixedSize(true);
         recyclerView.setLayoutManager(layoutManager);
@@ -114,47 +119,49 @@ public class GalleryActivity extends AppCompatActivity implements NavigationView
         makeRequest();
 
         // Setup toolbar in this view
-        Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
+        Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
 
-        FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
+        // Take a new photo with a FAB press
+        FloatingActionButton fab = findViewById(R.id.fab);
         fab.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                // TODO: go to camera view using the FAB
-                Snackbar.make(view, "Adding photos is not yet posible", Snackbar.LENGTH_LONG)
-                        .setAction("Action", null).show();
+
+                // Launch camera activity
+                dispatchTakePictureIntent();
             }
         });
 
-        DrawerLayout drawer = (DrawerLayout) findViewById(R.id.drawer_layout);
+        DrawerLayout drawer = findViewById(R.id.drawer_layout);
         ActionBarDrawerToggle toggle = new ActionBarDrawerToggle(
                 this, drawer, toolbar, R.string.navigation_drawer_open, R.string.navigation_drawer_close);
         drawer.addDrawerListener(toggle);
         toggle.syncState();
 
-        NavigationView navigationView = (NavigationView) findViewById(R.id.nav_view);
+        NavigationView navigationView = findViewById(R.id.nav_view);
         navigationView.setNavigationItemSelectedListener(this);
 
 
-
-
-
+        // GPS location code
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
+
         createLocationRequest();
 
         locationCallback = new LocationCallback() {
             @Override
             public void onLocationResult(LocationResult locationResult) {
                 if (locationResult == null) {
-                    Log.d(LOG_TAG, "Locatie onbekend");
+                    Log.d(LOG_TAG, "location unknown");
                     return;
                 }
                 for (Location location : locationResult.getLocations()) {
-                    Log.d(LOG_TAG, "Locatie ontvangen");
-                    Log.d(LOG_TAG, "Locatie: " + location.getLatitude() + ", " + location.getLongitude());
+                    Log.d(LOG_TAG, "location: " + location.getLatitude() + ", " + location.getLongitude());
+
+                    // Set current location to new location
+                    currentLocation = location;
                 }
-            };
+            }
         };
 
         getLastKnownLocation();
@@ -177,28 +184,12 @@ public class GalleryActivity extends AppCompatActivity implements NavigationView
     }
 
 
-
-
-
-
-
-
-
-
-
     private void getLastKnownLocation() {
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            // TODO: Consider calling
-            //    ActivityCompat#requestPermissions
-            // here to request the missing permissions, and then overriding
-            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
-            //                                          int[] grantResults)
-            // to handle the case where the user grants the permission. See the documentation
-            // for ActivityCompat#requestPermissions for more details.
 
             String permissions[] = {Manifest.permission.ACCESS_FINE_LOCATION};
             ActivityCompat.requestPermissions(this, permissions, REQUEST_LAST_LOCATION_PERMISSION);
-            Log.d(LOG_TAG, "Geen locatie permissie");
+            Log.d(LOG_TAG, "No location permission");
             return;
         }
         fusedLocationClient.getLastLocation()
@@ -208,9 +199,9 @@ public class GalleryActivity extends AppCompatActivity implements NavigationView
                         // Got last known location. In some rare situations this can be null.
                         if (location != null) {
                             // Logic to handle location object
-                            Log.d(LOG_TAG, "Laatste locatie bekend");
+                            Log.d(LOG_TAG, "Last location available");
                         } else {
-                            Log.d(LOG_TAG, "Laatste locatie NIET bekend");
+                            Log.d(LOG_TAG, "Last location unknown");
                         }
                     }
                 });
@@ -226,18 +217,18 @@ public class GalleryActivity extends AppCompatActivity implements NavigationView
         switch (requestCode) {
             case REQUEST_LAST_LOCATION_PERMISSION:
                 if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    Log.d(LOG_TAG, "Permissie gekregen");
+                    Log.d(LOG_TAG, "Permission granted");
                     getLastKnownLocation();
                 } else {
-                    Log.d(LOG_TAG, "Permissie NIET gekregen");
+                    Log.d(LOG_TAG, "Permission denied");
                 }
                 break;
             case REQUEST_LOCATION_UPDATES_PERMISSION:
                 if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    Log.d(LOG_TAG, "Permissie gekregen (updates)");
+                    Log.d(LOG_TAG, "Permission granted (updates)");
                     startLocationUpdates();
                 } else {
-                    Log.d(LOG_TAG, "Permissie NIET gekregen (updates)");
+                    Log.d(LOG_TAG, "Permission denied (updates)");
                     locationUpdates = false;
                 }
 
@@ -253,22 +244,16 @@ public class GalleryActivity extends AppCompatActivity implements NavigationView
 
     private void startLocationUpdates() {
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            // TODO: Consider calling
-            //    ActivityCompat#requestPermissions
-            // here to request the missing permissions, and then overriding
-            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
-            //                                          int[] grantResults)
-            // to handle the case where the user grants the permission. See the documentation
-            // for ActivityCompat#requestPermissions for more details.
+
             String permissions[] = {Manifest.permission.ACCESS_FINE_LOCATION};
             ActivityCompat.requestPermissions(this, permissions, REQUEST_LOCATION_UPDATES_PERMISSION);
 
-            Log.d(LOG_TAG, "Geen locatie permissies (update)");
+            Log.d(LOG_TAG, "No location permission (update)");
             return;
         }
         fusedLocationClient.requestLocationUpdates(locationRequest,
                 locationCallback,
-                null /* Looper */);
+                null  /*Looper*/ );
     }
 
 
@@ -297,7 +282,7 @@ public class GalleryActivity extends AppCompatActivity implements NavigationView
                     @Override
                     public void onResponse(JSONArray response) {
                         // when ready, handle response
-                        Toast.makeText(getApplicationContext(),"Got API data", Toast.LENGTH_SHORT).show();
+                        Log.i(LOG_TAG, "Got API data");
 
                         // Handle JSON response in separate function
                         handleResponse(response);
@@ -307,7 +292,7 @@ public class GalleryActivity extends AppCompatActivity implements NavigationView
                     @Override
                     public void onErrorResponse(VolleyError error) {
                         // Handle Volley/API error
-                        Toast.makeText(getApplicationContext(),"API is offline", Toast.LENGTH_SHORT).show();
+                        Log.i(LOG_TAG, "API is offline");
 
                     }
                 });
@@ -336,7 +321,7 @@ public class GalleryActivity extends AppCompatActivity implements NavigationView
 
     protected void handleResponse(JSONArray response){
 
-        Log.d("screenshotter", response.toString());
+        Log.d(LOG_TAG, response.toString());
 
         try{
             // Loop through the array elements
@@ -399,7 +384,7 @@ public class GalleryActivity extends AppCompatActivity implements NavigationView
 
         // Save a file: path for use with ACTION_VIEW intents
         currentPhotoPath = image.getAbsolutePath();
-        //Log.d("screenshotter", currentPhotoPath);
+        //Log.d(LOG_TAG, currentPhotoPath);
         return image;
     }
 
@@ -423,7 +408,7 @@ public class GalleryActivity extends AppCompatActivity implements NavigationView
 
                 //Toast.makeText(getApplicationContext(), photoURI.toString(), Toast.LENGTH_SHORT);
                 ImagePath = photoURI;
-                Log.d("screenshotter", ImagePath.toString());
+                Log.d(LOG_TAG, ImagePath.toString());
 
                 takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT, photoURI);
                 startActivityForResult(takePictureIntent, REQUEST_TAKE_PHOTO);
@@ -432,6 +417,7 @@ public class GalleryActivity extends AppCompatActivity implements NavigationView
     }
 
     protected void sendImageRequest(final Bitmap imageBitmap){
+
         // Instantiate the RequestQueue.
         RequestQueue queue = Volley.newRequestQueue(this);
 
@@ -439,18 +425,18 @@ public class GalleryActivity extends AppCompatActivity implements NavigationView
             @Override
             public void onResponse(NetworkResponse response) {
                 String resultResponse = new String(response.data);
-                Log.d("screenshotter", resultResponse);
+                Log.d(LOG_TAG, resultResponse);
                 try {
                     JSONObject result = new JSONObject(resultResponse);
                     String imageURL = result.getString("URL");
 
 
                     if (imageURL.contains("https")) {
-                        // tell everybody you have successfully uploaded image and posted strings
+                        // successfully uploaded
                         Log.i("Message", imageURL);
+                        Toast.makeText(getApplicationContext(), "Photo successfully uploaded", Toast.LENGTH_SHORT).show();
 
-                        // refresh UI
-
+                        // Refresh UI if setting is set
                         if(RefreshUI){
                             makeRequest();
                         }
@@ -503,7 +489,9 @@ public class GalleryActivity extends AppCompatActivity implements NavigationView
             protected Map<String, String> getParams() {
                 Map<String, String> params = new HashMap<>();
 
+                // Set Upload parameters like the upload key and location data
                 params.put("key", UploadKey);
+                params.put("location_data", currentLocation.getLatitude() + ", " + currentLocation.getLongitude());
                 return params;
             }
 
@@ -512,8 +500,9 @@ public class GalleryActivity extends AppCompatActivity implements NavigationView
                 Map<String, DataPart> params = new HashMap<>();
                 // file name could found file base or direct access from real path
                 // for now just get bitmap data from ImageView
-                //params.put("file_input", new DataPart("file.jpg", getFileDataFromBitmap(imageBitmap), "image/jpg"));
-                params.put("file_input", new DataPart("file.jpg", getFileDataFromUri(ImagePath), "image/jpg"));
+                params.put("file_input", new DataPart("file.jpg", getFileDataFromBitmap(imageBitmap), "image/jpg"));
+                //params.put("file_input", new DataPart("file.jpg", getFileDataFromUri(ImagePath), "image/jpg"));
+                //params.put("file_input", new DataPart("file.jpg", convertImageToByte(ImagePath), "image/jpg"));
 
                 return params;
             }
@@ -544,6 +533,7 @@ public class GalleryActivity extends AppCompatActivity implements NavigationView
      * @return byte array
      */
     public byte[] getFileDataFromUri(Uri imagePath) {
+
         try{
 
             Bitmap bitmapImage = MediaStore.Images.Media.getBitmap(getContentResolver(), imagePath);
@@ -559,11 +549,24 @@ public class GalleryActivity extends AppCompatActivity implements NavigationView
         return new ByteArrayOutputStream().toByteArray();
     }
 
-
+    public byte[] convertImageToByte(Uri uri){
+        byte[] data=null;
+        try {
+            ContentResolver cr = getBaseContext().getContentResolver();
+            InputStream inputStream = cr.openInputStream(uri);
+            Bitmap bitmap = BitmapFactory.decodeStream(inputStream);
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 100, baos);
+            data = baos.toByteArray();
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        }
+        return data;
+    }
 
     @Override
     public void onBackPressed() {
-        DrawerLayout drawer = (DrawerLayout) findViewById(R.id.drawer_layout);
+        DrawerLayout drawer = findViewById(R.id.drawer_layout);
         if (drawer.isDrawerOpen(GravityCompat.START)) {
             drawer.closeDrawer(GravityCompat.START);
         } else {
@@ -607,17 +610,20 @@ public class GalleryActivity extends AppCompatActivity implements NavigationView
 
         if (id == R.id.nav_camera) {
             // Handle the camera action
-            dispatchTakePictureIntent();
+            //dispatchTakePictureIntent();
 
         } else if (id == R.id.nav_gallery) {
+            // Handle the gallery action
 
         } else if (id == R.id.nav_slideshow) {
+            // Handle slideshow action
 
         } else if (id == R.id.nav_manage) {
+            // Handle manage action
 
         }
 
-        DrawerLayout drawer = (DrawerLayout) findViewById(R.id.drawer_layout);
+        DrawerLayout drawer = findViewById(R.id.drawer_layout);
         drawer.closeDrawer(GravityCompat.START);
         return true;
     }

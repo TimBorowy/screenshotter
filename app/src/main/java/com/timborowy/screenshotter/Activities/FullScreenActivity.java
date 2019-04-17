@@ -27,7 +27,7 @@ public class FullScreenActivity extends Activity {
 
         }
 
-        viewPager = (ViewPager)findViewById(R.id.viewPager);
+        viewPager = findViewById(R.id.viewPager);
 
         FullSizeAdapter fullSizeAdapter = new FullSizeAdapter(this, images);
         viewPager.setAdapter(fullSizeAdapter);
