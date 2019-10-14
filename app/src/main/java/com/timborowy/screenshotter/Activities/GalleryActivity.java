@@ -257,19 +257,6 @@ public class GalleryActivity extends AppCompatActivity implements NavigationView
     }
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
     protected void makeRequest(){
         // Instantiate the RequestQueue.
         RequestQueue queue = Volley.newRequestQueue(this);
